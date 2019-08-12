@@ -2,8 +2,10 @@ use clap::{App, Arg, SubCommand};
 use std::process::exit;
 
 fn main() {
-    let matches = App::new("kvs")
+    let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
         .subcommand(
             SubCommand::with_name("set")
                 .args(&[
