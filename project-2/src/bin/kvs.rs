@@ -1,7 +1,8 @@
 use clap::{App, Arg, SubCommand};
+use kvs::*;
 use std::process::exit;
 
-fn main() {
+fn main() -> Result<()> {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
