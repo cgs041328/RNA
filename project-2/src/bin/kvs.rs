@@ -1,5 +1,6 @@
 use clap::{App, Arg, SubCommand};
 use kvs::*;
+use std::env;
 use std::process::exit;
 
 fn main() -> Result<()> {
@@ -29,17 +30,32 @@ fn main() -> Result<()> {
 
     match matches.subcommand() {
         ("set", Some(_matches)) => {
-            eprintln!("unimplemented");
-            exit(1);
+            let key = _matches.value_of("key").expect("Key is missing");
+            let value = _matches.value_of("value").expect("Value is missing");
+            let mut store = KvStore::open(env::current_dir()?)?;
+            store.set(key.to_owned(), value.to_owned())?;
         }
         ("get", Some(_matches)) => {
-            eprintln!("unimplemented");
-            exit(1);
+            let key = _matches.value_of("key").expect("Key is missing");
+            let mut store = KvStore::open(env::current_dir()?)?;
+            match store.get(key.to_owned())? {
+                Some(value) => {
+                    println!("{}", value);
+                }
+                None => {
+                    println!("Key not found");
+                }
+            }
         }
         ("rm", Some(_matches)) => {
-            eprintln!("unimplemented");
-            exit(1);
+            let key = _matches.value_of("key").expect("Key is missing");
+            let mut store = KvStore::open(env::current_dir()?)?;
+            if let Err(_) = store.remove(key.to_owned()) {
+                println!("Key not found");
+                exit(1);
+            }
         }
         _ => unreachable!(),
     }
+    Ok(())
 }
