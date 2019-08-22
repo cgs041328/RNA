@@ -2,10 +2,12 @@ use crate::Result;
 use failure::format_err;
 use serde::{Deserialize, Serialize};
 use serde_json::Deserializer;
-use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    fs::{File, OpenOptions},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    path::PathBuf,
+};
 
 ///A key-value Store of String
 ///
@@ -23,7 +25,7 @@ use std::path::PathBuf;
 /// ```
 pub struct KvStore {
     writer: BufWriter<File>,
-    index: HashMap<String, String>,
+    index: HashMap<String, CommandPosition>,
     reader: BufReader<File>,
 }
 
@@ -57,16 +59,37 @@ impl KvStore {
             key: key.clone(),
             value: value.clone(),
         };
+        self.writer.seek(SeekFrom::End(0))?;
+        let before = self.writer.stream_position()?;
         serde_json::to_writer(&mut self.writer, &command)?;
         self.writer.flush()?;
-        self.index.insert(key, value);
+        let after = self.writer.stream_position()?;
+        let len = after - before;
+        self.index.insert(
+            key,
+            CommandPosition {
+                length: len,
+                position: before,
+            },
+        );
         Ok(())
     }
     ///Get the String value of a String key.
     ///
     /// Return NONE if the key does not exist.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        Ok(self.index.get(&key).cloned())
+        if let Some(cmd_pos) = self.index.get(&key) {
+            self.reader.seek(SeekFrom::Start(cmd_pos.position))?;
+            let cmd_reader = self.reader.get_mut().take(cmd_pos.length);
+            if let Command::Set { value, .. } = serde_json::from_reader(cmd_reader)?{
+                Ok(Some(value.to_owned()))
+            }
+            else{
+                Err(format_err!("Invalid command"))
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     ///Remove the given key.
@@ -85,16 +108,26 @@ impl KvStore {
     fn build_index(&mut self) -> Result<()> {
         // self.index = HashMap::new();
         self.reader.seek(SeekFrom::Start(0))?;
-        let stream = Deserializer::from_reader(&mut self.reader).into_iter::<Command>();
-        for command in stream {
+        let mut pos = self.reader.stream_position()?;
+        let mut stream = Deserializer::from_reader(&mut self.reader).into_iter::<Command>();
+
+        while let Some(command) = stream.next() {
+            let curr_pos = stream.byte_offset() as u64;
             match command? {
-                Command::Set { key, value } => {
-                    self.index.insert(key, value);
+                Command::Set { key, value: _ } => {
+                    self.index.insert(
+                        key,
+                        CommandPosition {
+                            position: pos,
+                            length: curr_pos - pos,
+                        },
+                    );
                 }
                 Command::Remove { key } => {
                     self.index.remove(&key);
                 }
             }
+            pos = curr_pos;
         }
         Ok(())
     }
@@ -105,4 +138,9 @@ impl KvStore {
 enum Command {
     Set { key: String, value: String },
     Remove { key: String },
+}
+
+struct CommandPosition {
+    position: u64,
+    length: u64,
 }

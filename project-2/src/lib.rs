@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+#![feature(seek_convenience)]
 //! A key-value store.
 
 pub use error::Result;
