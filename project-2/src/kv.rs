@@ -12,10 +12,14 @@ use std::path::PathBuf;
 /// Example:
 ///
 /// ```rust
-/// use kvs::KvStore;
+/// use kvs::{Result, KvStore};
+/// use std::env::current_dir;
+/// fn try_main() -> Result<()> {
 /// let mut store = KvStore::open(current_dir()?)?;
 /// store.set("key1".to_owned(), "value1".to_owned());
-/// assert_eq!(store.get("key1".to_owned()), Some("value1".to_owned()));
+/// assert_eq!(store.get("key1".to_owned())?, Some("value1".to_owned()));
+/// Ok(())
+/// }
 /// ```
 pub struct KvStore {
     writer: BufWriter<File>,
