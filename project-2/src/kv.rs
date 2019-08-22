@@ -40,36 +40,42 @@ impl KvStore {
         let writer = BufWriter::new(file);
         let file = OpenOptions::new().read(true).open(path)?;
         let reader = BufReader::new(file);
-        Ok(KvStore {
+        let mut store = KvStore {
             writer,
             reader,
             index: HashMap::new(),
-        })
+        };
+        store.build_index()?;
+        Ok(store)
     }
 
     ///Set a key-value pair of String.
     ///
     /// If the key already exists, value will be overwritten.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let command = Command::Set { key, value };
+        let command = Command::Set {
+            key: key.clone(),
+            value: value.clone(),
+        };
         serde_json::to_writer(&mut self.writer, &command)?;
         self.writer.flush()?;
+        self.index.insert(key, value);
         Ok(())
     }
     ///Get the String value of a String key.
     ///
     /// Return NONE if the key does not exist.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        self.build_index()?;
         Ok(self.index.get(&key).cloned())
     }
 
     ///Remove the given key.
     pub fn remove(&mut self, key: String) -> Result<()> {
-        if let Some(_) = self.get(key.clone())? {
-            let command = Command::Remove { key };
+        if self.index.get(&key).is_some() {
+            let command = Command::Remove { key: key.clone() };
             serde_json::to_writer(&mut self.writer, &command)?;
             self.writer.flush()?;
+            self.index.remove(&key);
             Ok(())
         } else {
             Err(format_err!("Key not found"))
