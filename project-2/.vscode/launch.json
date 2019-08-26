@@ -9,7 +9,7 @@
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/target/debug/kvs.exe",
-      "args": ["rm", "asd"],
+      "args": ["get", "key1"],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],
