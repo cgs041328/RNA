@@ -13,17 +13,37 @@ fn main() -> Result<()> {
                 .args(&[
                     Arg::with_name("key").help("A string key").required(true),
                     Arg::with_name("value").help("A string key").required(true),
+                    Arg::with_name("addr")
+                        .help("Server address")
+                        .long("addr")
+                        .takes_value(true)
+                        .value_name("IP-PORT")
+                        .default_value("127.0.0.1:4000"),
                 ])
                 .about("Set the value of a string key to a string"),
         )
         .subcommand(
             SubCommand::with_name("get")
-                .arg(Arg::with_name("key").help("A string key").required(true))
+                .args(&[
+                    Arg::with_name("key").help("A string key").required(true),
+                    Arg::with_name("addr")
+                        .help("Server address")
+                        .long("addr")
+                        .value_name("IP-PORT")
+                        .default_value("127.0.0.1:4000"),
+                ])
                 .about("Get the string value of a given string key"),
         )
         .subcommand(
             SubCommand::with_name("rm")
-                .arg(Arg::with_name("key").help("A string key").required(true))
+                .args(&[
+                    Arg::with_name("key").help("A string key").required(true),
+                    Arg::with_name("addr")
+                        .help("Server address")
+                        .long("addr")
+                        .value_name("IP-PORT")
+                        .default_value("127.0.0.1:4000"),
+                ])
                 .about("Remove a given key"),
         )
         .get_matches();
