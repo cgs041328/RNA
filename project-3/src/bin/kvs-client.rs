@@ -1,7 +1,11 @@
 use clap::{App, Arg, SubCommand};
 use kvs::*;
 use std::env;
+use std::io::prelude::*;
+use std::net::{SocketAddr, TcpStream};
 use std::process::exit;
+
+const DEFAULT_ADDRESS: &str = "127.0.0.1:4000";
 
 fn main() -> Result<()> {
     let matches = App::new("kvs-client")
@@ -18,7 +22,7 @@ fn main() -> Result<()> {
                         .long("addr")
                         .takes_value(true)
                         .value_name("IP-PORT")
-                        .default_value("127.0.0.1:4000"),
+                        .default_value(DEFAULT_ADDRESS),
                 ])
                 .about("Set the value of a string key to a string"),
         )
@@ -30,7 +34,7 @@ fn main() -> Result<()> {
                         .help("Server address")
                         .long("addr")
                         .value_name("IP-PORT")
-                        .default_value("127.0.0.1:4000"),
+                        .default_value(DEFAULT_ADDRESS),
                 ])
                 .about("Get the string value of a given string key"),
         )
@@ -42,40 +46,48 @@ fn main() -> Result<()> {
                         .help("Server address")
                         .long("addr")
                         .value_name("IP-PORT")
-                        .default_value("127.0.0.1:4000"),
+                        .default_value(DEFAULT_ADDRESS),
                 ])
                 .about("Remove a given key"),
         )
         .get_matches();
 
-    match matches.subcommand() {
-        ("set", Some(_matches)) => {
-            let key = _matches.value_of("key").expect("Key is missing");
-            let value = _matches.value_of("value").expect("Value is missing");
-            let mut store = KvStore::open(env::current_dir()?)?;
-            store.set(key.to_owned(), value.to_owned())?;
-        }
-        ("get", Some(_matches)) => {
-            let key = _matches.value_of("key").expect("Key is missing");
-            let mut store = KvStore::open(env::current_dir()?)?;
-            match store.get(key.to_owned())? {
-                Some(value) => {
-                    println!("{}", value);
+    if let (cmd, Some(_matches)) = matches.subcommand() {
+        let addr = _matches.value_of("addr").expect("Addr is missing");
+        let addr: SocketAddr = addr.parse().expect("Addr format is wrong");
+        let mut stream = TcpStream::connect(addr)?;
+        let mut buffer = [0; 512];
+        stream.read(&mut buffer).unwrap();
+        println!("{}", String::from_utf8_lossy(&buffer[..]));
+        match cmd {
+            "set" => {
+                let key = _matches.value_of("key").expect("Key is missing");
+                let value = _matches.value_of("value").expect("Value is missing");
+                let mut store = KvStore::open(env::current_dir()?)?;
+                store.set(key.to_owned(), value.to_owned())?;
+            }
+            "get" => {
+                let key = _matches.value_of("key").expect("Key is missing");
+                let mut store = KvStore::open(env::current_dir()?)?;
+                match store.get(key.to_owned())? {
+                    Some(value) => {
+                        println!("{}", value);
+                    }
+                    None => {
+                        println!("Key not found");
+                    }
                 }
-                None => {
+            }
+            "rm" => {
+                let key = _matches.value_of("key").expect("Key is missing");
+                let mut store = KvStore::open(env::current_dir()?)?;
+                if let Err(_) = store.remove(key.to_owned()) {
                     println!("Key not found");
+                    exit(1);
                 }
             }
+            _ => unreachable!(),
         }
-        ("rm", Some(_matches)) => {
-            let key = _matches.value_of("key").expect("Key is missing");
-            let mut store = KvStore::open(env::current_dir()?)?;
-            if let Err(_) = store.remove(key.to_owned()) {
-                println!("Key not found");
-                exit(1);
-            }
-        }
-        _ => unreachable!(),
     }
     Ok(())
 }
