@@ -8,7 +8,7 @@
       "name": "(Windows) 启动",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "C:\\Users\\chen.ganshen\\Documents\\GitHub\\RNA\\project-3\\target\\debug\\deps\\cli-ac9e230ac9750024.exe",
+      "program": "C:\\Users\\chen.ganshen\\Documents\\GitHub\\RNA\\project-3\\target\\debug\\kvs-server.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",

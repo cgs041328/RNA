@@ -1,9 +1,10 @@
 use kvs::*;
 use log::info;
+use serde::Deserialize;
 use simplelog::{Config, LevelFilter, TerminalMode};
 use std::env;
 use std::io::prelude::*;
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener};
 use structopt::StructOpt;
 
 const DEFAULT_ENGINE: &str = "kvs";
@@ -39,8 +40,41 @@ fn main() -> Result<()> {
     // accept connections and process them serially
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        let response = "ok";
-        stream.write(response.as_bytes())?;
+        let mut de = serde_json::Deserializer::from_reader(&mut stream);
+        let request: KvsRequest = KvsRequest::deserialize(&mut de)?;
+        println!("{:?}", request);
+
+        let response: KvsResponse;
+        match request {
+            KvsRequest::Get { key } => {
+                let mut store = KvStore::open(env::current_dir()?)?;
+                match store.get(key.to_owned())? {
+                    Some(value) => {
+                        response = KvsResponse::Ok(Some(value));
+                    }
+                    None => {
+                        response = KvsResponse::Err("Key not found".to_owned());
+                    }
+                }
+            }
+            KvsRequest::Set { key, value } => {
+                let mut store = KvStore::open(env::current_dir()?)?;
+                if let Err(_) = store.set(key.to_owned(), value.to_owned()) {
+                    response = KvsResponse::Err("Set error".to_owned());
+                } else {
+                    response = KvsResponse::Ok(None);
+                }
+            }
+            KvsRequest::Remove { key } => {
+                let mut store = KvStore::open(env::current_dir()?)?;
+                if let Err(_) = store.remove(key.to_owned()) {
+                    response = KvsResponse::Err("Key not found".to_owned());
+                } else {
+                    response = KvsResponse::Ok(None);
+                }
+            }
+        }
+        serde_json::to_writer(&mut stream, &response)?;
         stream.flush()?;
     }
     Ok(())
