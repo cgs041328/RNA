@@ -2,12 +2,12 @@
 #![feature(seek_convenience)]
 //! A key-value store.
 
+pub use engines::{KvStore, KvsEngine, SledEngine};
 pub use error::Result;
-pub use kv::{KvStore, KvsEngine};
 pub use request::KvsRequest;
 pub use response::KvsResponse;
 
+mod engines;
 mod error;
-mod kv;
 mod request;
 mod response;

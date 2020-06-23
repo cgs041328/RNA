@@ -1,3 +1,4 @@
+use crate::engines::KvsEngine;
 use crate::Result;
 use failure::format_err;
 use serde::{Deserialize, Serialize};
@@ -12,32 +13,12 @@ use std::{
 
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
-/// Trait for a key value storage engine.
-pub trait KvsEngine {
-    /// Sets the value of a string key to a string.
-    ///
-    /// If the key already exists, the previous value will be overwritten.
-    fn set(&mut self, key: String, value: String) -> Result<()>;
-
-    /// Gets the string value of a given string key.
-    ///
-    /// Returns `None` if the given key does not exist.
-    fn get(&mut self, key: String) -> Result<Option<String>>;
-
-    /// Removes a given key.
-    ///
-    /// # Errors
-    ///
-    /// It returns `KvsError::KeyNotFound` if the given key is not found.
-    fn remove(&mut self, key: String) -> Result<()>;
-}
-
 ///A key-value Store of String
 ///
 /// Example:
 ///
 /// ```rust
-/// use kvs::{Result, KvStore};
+/// use kvs::{Result, KvStore, KvsEngine};
 /// use std::env::current_dir;
 /// fn try_main() -> Result<()> {
 /// let mut store = KvStore::open(current_dir()?)?;
@@ -60,6 +41,21 @@ impl KvStore {
     pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
         let path = path.into();
         fs::create_dir_all(&path)?;
+
+        let engine_path = path.join("type");
+        let mut engine_type_file = fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(&engine_path)?;
+        let mut engine_type = String::new();
+        engine_type_file.read_to_string(&mut engine_type)?;
+        if engine_type.is_empty() {
+            engine_type_file.write(b"kvs")?;
+            engine_type_file.flush()?;
+        } else if engine_type != String::from("kvs") {
+            return Err(format_err!("Wrong engine"));
+        }
 
         let mut readers = HashMap::new();
         let mut index = HashMap::new();
@@ -84,72 +80,6 @@ impl KvStore {
             current_gen,
         };
         Ok(store)
-    }
-
-    ///Set a key-value pair of String.
-    ///
-    /// If the key already exists, value will be overwritten.
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let command = Command::Set {
-            key: key.clone(),
-            value: value.clone(),
-        };
-        self.writer.seek(SeekFrom::End(0))?;
-        let before = self.writer.stream_position()?;
-        serde_json::to_writer(&mut self.writer, &command)?;
-        self.writer.flush()?;
-        let after = self.writer.stream_position()?;
-        let len = after - before;
-        if let Some(_) = self.index.insert(
-            key,
-            CommandPosition {
-                length: len,
-                position: before,
-                gen: self.current_gen,
-            },
-        ) {
-            self.uncompacted_size += len;
-        };
-
-        if self.uncompacted_size > COMPACTION_THRESHOLD {
-            self.compact()?;
-        }
-
-        Ok(())
-    }
-    ///Get the String value of a String key.
-    ///
-    /// Return NONE if the key does not exist.
-    pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        if let Some(cmd_pos) = self.index.get(&key) {
-            let reader = self
-                .readers
-                .get_mut(&cmd_pos.gen)
-                .expect("Invalid command position");
-            reader.seek(SeekFrom::Start(cmd_pos.position))?;
-            let cmd_reader = reader.take(cmd_pos.length);
-            if let Command::Set { value, .. } = serde_json::from_reader(cmd_reader)? {
-                Ok(Some(value.to_owned()))
-            } else {
-                Err(format_err!("Invalid command"))
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
-    ///Remove the given key.
-    pub fn remove(&mut self, key: String) -> Result<()> {
-        if self.index.get(&key).is_some() {
-            let command = Command::Remove { key: key.clone() };
-            serde_json::to_writer(&mut self.writer, &command)?;
-            self.writer.flush()?;
-            let old_cmd = self.index.remove(&key).expect("key not found");
-            self.uncompacted_size += old_cmd.length;
-            Ok(())
-        } else {
-            Err(format_err!("Key not found"))
-        }
     }
     fn compact(&mut self) -> Result<()> {
         let compact_gen = self.current_gen + 1;
@@ -188,6 +118,74 @@ impl KvStore {
         }
 
         Ok(())
+    }
+}
+
+impl KvsEngine for KvStore {
+    ///Set a key-value pair of String.
+    ///
+    /// If the key already exists, value will be overwritten.
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        let command = Command::Set {
+            key: key.clone(),
+            value: value.clone(),
+        };
+        self.writer.seek(SeekFrom::End(0))?;
+        let before = self.writer.stream_position()?;
+        serde_json::to_writer(&mut self.writer, &command)?;
+        self.writer.flush()?;
+        let after = self.writer.stream_position()?;
+        let len = after - before;
+        if let Some(_) = self.index.insert(
+            key,
+            CommandPosition {
+                length: len,
+                position: before,
+                gen: self.current_gen,
+            },
+        ) {
+            self.uncompacted_size += len;
+        };
+
+        if self.uncompacted_size > COMPACTION_THRESHOLD {
+            self.compact()?;
+        }
+
+        Ok(())
+    }
+    ///Get the String value of a String key.
+    ///
+    /// Return NONE if the key does not exist.
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        if let Some(cmd_pos) = self.index.get(&key) {
+            let reader = self
+                .readers
+                .get_mut(&cmd_pos.gen)
+                .expect("Invalid command position");
+            reader.seek(SeekFrom::Start(cmd_pos.position))?;
+            let cmd_reader = reader.take(cmd_pos.length);
+            if let Command::Set { value, .. } = serde_json::from_reader(cmd_reader)? {
+                Ok(Some(value.to_owned()))
+            } else {
+                Err(format_err!("Invalid command"))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    ///Remove the given key.
+    fn remove(&mut self, key: String) -> Result<()> {
+        if self.index.get(&key).is_some() {
+            let command = Command::Remove { key: key.clone() };
+            serde_json::to_writer(&mut self.writer, &command)?;
+            self.writer.flush()?;
+            let old_cmd = self.index.remove(&key).expect("key not found");
+            self.uncompacted_size += old_cmd.length;
+            Ok(())
+        } else {
+            Err(format_err!("Key not found"))
+        }
     }
 }
 

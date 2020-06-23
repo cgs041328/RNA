@@ -36,6 +36,13 @@ fn main() -> Result<()> {
     info!("Listening on {}", opt.addr);
 
     let listener = TcpListener::bind(opt.addr)?;
+    let mut store: Box<dyn KvsEngine>;
+
+    match engine.as_str() {
+        "sled" => store = Box::new(SledEngine::open(&env::current_dir()?)?),
+        "kvs" => store = Box::new(KvStore::open(env::current_dir()?)?),
+        _ => unreachable!(),
+    }
 
     // accept connections and process them serially
     for stream in listener.incoming() {
@@ -46,19 +53,15 @@ fn main() -> Result<()> {
 
         let response: KvsResponse;
         match request {
-            KvsRequest::Get { key } => {
-                let mut store = KvStore::open(env::current_dir()?)?;
-                match store.get(key.to_owned())? {
-                    Some(value) => {
-                        response = KvsResponse::Ok(Some(value));
-                    }
-                    None => {
-                        response = KvsResponse::Err("Key not found".to_owned());
-                    }
+            KvsRequest::Get { key } => match store.get(key.to_owned())? {
+                Some(value) => {
+                    response = KvsResponse::Ok(Some(value));
                 }
-            }
+                None => {
+                    response = KvsResponse::Ok(Some("Key not found".to_owned()));
+                }
+            },
             KvsRequest::Set { key, value } => {
-                let mut store = KvStore::open(env::current_dir()?)?;
                 if let Err(_) = store.set(key.to_owned(), value.to_owned()) {
                     response = KvsResponse::Err("Set error".to_owned());
                 } else {
@@ -66,7 +69,6 @@ fn main() -> Result<()> {
                 }
             }
             KvsRequest::Remove { key } => {
-                let mut store = KvStore::open(env::current_dir()?)?;
                 if let Err(_) = store.remove(key.to_owned()) {
                     response = KvsResponse::Err("Key not found".to_owned());
                 } else {

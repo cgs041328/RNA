@@ -115,6 +115,8 @@ fn main() -> Result<()> {
             }
             _ => unreachable!(),
         }
+    } else {
+        exit(1);
     }
     Ok(())
 }
