@@ -2,31 +2,13 @@ use crate::engines::KvsEngine;
 use crate::Result;
 use failure::format_err;
 use sled::Db;
-use std::{
-    fs,
-    io::{Read, Write},
-    path::Path,
-};
+use std::path::Path;
 ///SledEngine
 pub struct SledEngine(Db);
 
 impl SledEngine {
     ///open SledEngine
     pub fn open(path: &Path) -> Result<SledEngine> {
-        let engine_path = path.join("type");
-        let mut engine_type_file = fs::OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&engine_path)?;
-        let mut engine_type = String::new();
-        engine_type_file.read_to_string(&mut engine_type)?;
-        if engine_type.is_empty() {
-            engine_type_file.write(b"sled")?;
-            engine_type_file.flush()?;
-        } else if engine_type != String::from("sled") {
-            return Err(format_err!("Wrong engine"));
-        }
         let db = sled::open(path)?;
         Ok(SledEngine(db))
     }

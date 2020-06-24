@@ -1,10 +1,14 @@
+use failure::format_err;
 use kvs::*;
 use log::info;
 use serde::Deserialize;
 use simplelog::{Config, LevelFilter, TerminalMode};
-use std::env;
-use std::io::prelude::*;
 use std::net::{SocketAddr, TcpListener};
+use std::{
+    env, fs,
+    io::{Read, Write},
+    path::Path,
+};
 use structopt::StructOpt;
 
 const DEFAULT_ENGINE: &str = "kvs";
@@ -38,9 +42,18 @@ fn main() -> Result<()> {
     let listener = TcpListener::bind(opt.addr)?;
     let mut store: Box<dyn KvsEngine>;
 
+    let curr_dir = env::current_dir()?;
     match engine.as_str() {
-        "sled" => store = Box::new(SledEngine::open(&env::current_dir()?)?),
-        "kvs" => store = Box::new(KvStore::open(env::current_dir()?)?),
+        "sled" => {
+            current_engine_or(&curr_dir, "sled")?;
+            store = Box::new(SledEngine::open(&curr_dir)?)
+        }
+        "kvs" => {
+            store = {
+                current_engine_or(&curr_dir, "kvs")?;
+                Box::new(KvStore::open(&curr_dir)?)
+            }
+        }
         _ => unreachable!(),
     }
 
@@ -80,4 +93,21 @@ fn main() -> Result<()> {
         stream.flush()?;
     }
     Ok(())
+}
+fn current_engine_or<'a>(path: &Path, engine: &'a str) -> Result<&'a str> {
+    let engine_path = path.join("type");
+    let mut engine_type_file = fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(&engine_path)?;
+    let mut engine_type = String::new();
+    engine_type_file.read_to_string(&mut engine_type)?;
+    if engine_type.is_empty() {
+        engine_type_file.write(engine.as_bytes())?;
+        engine_type_file.flush()?;
+    } else if engine_type != String::from(engine) {
+        return Err(format_err!("Wrong engine"));
+    }
+    Ok(engine)
 }

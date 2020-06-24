@@ -42,21 +42,6 @@ impl KvStore {
         let path = path.into();
         fs::create_dir_all(&path)?;
 
-        let engine_path = path.join("type");
-        let mut engine_type_file = fs::OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&engine_path)?;
-        let mut engine_type = String::new();
-        engine_type_file.read_to_string(&mut engine_type)?;
-        if engine_type.is_empty() {
-            engine_type_file.write(b"kvs")?;
-            engine_type_file.flush()?;
-        } else if engine_type != String::from("kvs") {
-            return Err(format_err!("Wrong engine"));
-        }
-
         let mut readers = HashMap::new();
         let mut index = HashMap::new();
         let gen_list = sort_gen_list(&path)?;
