@@ -12,7 +12,6 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
@@ -64,7 +63,6 @@ impl KvStore {
         let reader = KvStoreReader {
             path: Arc::clone(&path),
             readers: RefCell::new(readers),
-            safe_point: Arc::new(AtomicU64::new(0)),
         };
 
         let writer = KvStoreWriter {
@@ -126,7 +124,6 @@ fn new_log_file(path: &Path, gen: u64) -> Result<BufWriter<File>> {
 struct KvStoreReader {
     readers: RefCell<BTreeMap<u64, BufReader<File>>>,
     path: Arc<PathBuf>,
-    safe_point: Arc<AtomicU64>,
 }
 
 impl Clone for KvStoreReader {
@@ -134,26 +131,15 @@ impl Clone for KvStoreReader {
         KvStoreReader {
             readers: RefCell::new(BTreeMap::new()),
             path: Arc::clone(&self.path),
-            safe_point: Arc::clone(&self.safe_point),
         }
     }
 }
 
 impl KvStoreReader {
-    /// Close file handles with generation number less than safe_point.
-    ///
-    /// `safe_point` is updated to the latest compaction gen after a compaction finishes.
-    /// The compaction generation contains the sum of all operations before it and the
-    /// in-memory index contains no entries with generation number less than safe_point.
-    /// So we can safely close those file handles and the stale files can be deleted.
-    fn close_stale_handles(&self) {
+    fn close_stale_handle(&self, gen: u64) {
         let mut readers = self.readers.borrow_mut();
-        while !readers.is_empty() {
-            let first_gen = *readers.keys().next().unwrap();
-            if self.safe_point.load(Ordering::SeqCst) <= first_gen {
-                break;
-            }
-            readers.remove(&first_gen);
+        if readers.contains_key(&gen) {
+            readers.remove(&gen);
         }
     }
 
@@ -218,14 +204,12 @@ impl KvStoreWriter {
         }
         compact_writer.flush()?;
 
-        self.reader.safe_point.store(compact_gen, Ordering::SeqCst);
-        self.reader.close_stale_handles();
-
         let stale_gens = sort_gen_list(&self.path)?
             .into_iter()
             .filter(|&gen| gen < compact_gen);
 
         for stale_gen in stale_gens {
+            self.reader.close_stale_handle(stale_gen);
             fs::remove_file(log_path(&self.path, stale_gen))?;
         }
 
