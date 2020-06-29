@@ -13,6 +13,7 @@ structopt = "0.3.1"
 log = "0.4.8"
 simplelog = "0.8.0"
 sled = "0.32.0"
+crossbeam-skiplist =  { version = "0.0.0", git = "https://github.com/crossbeam-rs/crossbeam.git", rev = "8cc906b" }
 
 [dev-dependencies]
 assert_cmd = "0.11"

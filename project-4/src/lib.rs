@@ -6,9 +6,11 @@ pub use engines::{KvStore, KvsEngine, SledEngine};
 pub use error::Result;
 pub use request::KvsRequest;
 pub use response::KvsResponse;
+pub use server::KvsServer;
 
 mod engines;
 mod error;
 mod request;
 mod response;
+mod server;
 pub mod thread_pool;

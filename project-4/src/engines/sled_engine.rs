@@ -4,6 +4,7 @@ use failure::format_err;
 use sled::Db;
 use std::path::Path;
 ///SledEngine
+#[derive(Clone)]
 pub struct SledEngine(Db);
 
 impl SledEngine {
@@ -18,7 +19,7 @@ impl KvsEngine for SledEngine {
     ///Set a key-value pair of String.
     ///
     /// If the key already exists, value will be overwritten.
-    fn set(&mut self, key: String, value: String) -> Result<()> {
+    fn set(&self, key: String, value: String) -> Result<()> {
         self.0.insert(key, value.as_bytes())?;
         self.0.flush()?;
         Ok(())
@@ -26,7 +27,7 @@ impl KvsEngine for SledEngine {
     ///Get the String value of a String key.
     ///
     /// Return NONE if the key does not exist.
-    fn get(&mut self, key: String) -> Result<Option<String>> {
+    fn get(&self, key: String) -> Result<Option<String>> {
         Ok(self
             .0
             .get(key)?
@@ -34,7 +35,7 @@ impl KvsEngine for SledEngine {
     }
 
     ///Remove the given key.
-    fn remove(&mut self, key: String) -> Result<()> {
+    fn remove(&self, key: String) -> Result<()> {
         self.0.remove(key)?.ok_or(format_err!("key not found"))?;
         self.0.flush()?;
         Ok(())
