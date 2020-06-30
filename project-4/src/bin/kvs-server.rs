@@ -1,4 +1,5 @@
 use failure::format_err;
+use kvs::thread_pool::ThreadPool;
 use kvs::*;
 use log::info;
 use simplelog::{Config, LevelFilter, TerminalMode};
@@ -57,7 +58,8 @@ fn main() -> Result<()> {
 }
 
 fn run_with_engine<E: KvsEngine>(engine: E, addr: SocketAddr) -> Result<()> {
-    let server = KvsServer::new(engine);
+    let pool = thread_pool::NaiveThreadPool::new(1)?;
+    let server = KvsServer::new(engine, pool);
     server.run(addr)
 }
 
